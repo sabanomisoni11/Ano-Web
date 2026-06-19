@@ -1,6 +1,6 @@
 {
     "manifest_version": 3,
-  "name": "KeywordExtractor",
+  "name": "Ano-Web",
   "version": "1.0",
   "permissions": ["storage", "tabs"],
   "content_scripts": [
@@ -12,5 +12,8 @@
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "chrome_url_overrides": {
+    "history": "index.html"
   }
 }
