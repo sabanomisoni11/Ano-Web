@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Ano-Web",
+  "version": "1.0",
+  "description": "AIを活用した「ふわっと検索」履歴アプリ",
+  "permissions": [
+    "tabs"
+  ],
+  "action": {
+    "default_title": "Ano-Webを開く"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "commands": {
+    "open-search-page": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+H",
+        "mac": "Command+Shift+H"
+      },
+      "description": "Ano-Web 検索画面を開く"
+    }
+  }
+}
