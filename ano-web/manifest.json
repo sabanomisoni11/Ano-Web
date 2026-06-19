@@ -1,0 +1,16 @@
+{
+    "manifest_version": 3,
+  "name": "KeywordExtractor",
+  "version": "1.0",
+  "permissions": ["storage", "tabs"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["memory.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
