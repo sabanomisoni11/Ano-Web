@@ -4,13 +4,29 @@
   "version": "1.0",
   "description": "AIを活用した「ふわっと検索」履歴アプリ",
   "permissions": [
+    "storage",
     "tabs"
   ],
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "memory.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "chrome_url_overrides": {
+    "history": "index.html"
+  },
   "action": {
     "default_title": "Ano-Webを開く"
-  },
-  "background": {
-    "service_worker": "background.js"
   },
   "commands": {
     "open-search-page": {
