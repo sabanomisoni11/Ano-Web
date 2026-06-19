@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ano-Web - ふわっと検索</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: #FFF9FA; 
+      font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif;
+      color: #4A4A4A;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+
+    header {
+      width: 100%;
+      max-width: 600px;
+      padding: 30px 20px 20px 20px;
+      box-sizing: border-box;
+      flex-shrink: 0;
+    }
+
+    .search-container {
+      position: relative;
+      width: 100%;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 14px 24px 14px 48px;
+      font-size: 16px;
+      border: none;
+      border-radius: 30px;
+      background-color: #FBF0F2; 
+      color: #333333;
+      outline: none;
+      box-sizing: border-box;
+      transition: background-color 0.2s, box-shadow 0.2s;
+    }
+
+    .search-input:focus {
+      background-color: #F5E4E7;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+    }
+
+    .search-input::placeholder {
+      color: #A6989A;
+    }
+
+    .search-button {
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 32px;
+      height: 32px;
+      background: none;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: background-color 0.2s;
+      padding: 0;
+      z-index: 2;
+    }
+
+    .search-button:hover {
+      background-color: rgba(0, 0, 0, 0.04);
+    }
+
+    .search-icon-shape {
+      position: relative;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #9A8E90;
+      border-radius: 50%;
+      box-sizing: border-box;
+      margin-top: -1px;
+      margin-left: -1px;
+    }
+    
+    .search-icon-shape::after {
+      content: '';
+      position: absolute;
+      bottom: -4px;
+      right: -4px;
+      width: 2px;
+      height: 5px;
+      background-color: #9A8E90;
+      transform: rotate(-45deg);
+    }
+
+    main {
+      width: 100%;
+      max-width: 800px;
+      flex: 1;
+      padding: 0 20px 30px 20px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    /* 検索結果および履歴を表示するメインボード */
+    .results-board {
+      background-color: #FFF9FA; 
+      border-radius: 16px; 
+      border: 1px solid #E6D5D8; 
+      box-shadow: 0 10px 30px rgba(155, 125, 130, 0.25); 
+      padding: 6px 6px 6px 0px; 
+      box-sizing: border-box;
+      height: 100%;
+      overflow-y: auto; 
+      overflow-x: hidden;
+      scroll-behavior: smooth;
+      position: relative; 
+    }
+
+    /* スクロールバーのカスタマイズ：端の突き抜け防止処理 */
+    .results-board::-webkit-scrollbar {
+      width: 6px;
+    }
+    .results-board::-webkit-scrollbar-track {
+      background: transparent;
+      margin: 10px 0; /* 上下に余白を作り、枠の角からはみ出さないようにする */
+    }
+    .results-board::-webkit-scrollbar-thumb {
+      background: #ECD9DC;
+      border-radius: 3px;
+    }
+    .results-board::-webkit-scrollbar-thumb:hover {
+      background: #E6D5D8;
+    }
+
+    /* 各データの行アイテム */
+    .data-item {
+      padding: 12px 14px 12px 20px;
+      box-sizing: border-box;
+      transition: background-color 0.15s;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    /* アイテム間の区切り線 */
+    .data-item:not(:last-child) {
+      border-bottom: 1px solid #F5E6E9;
+    }
+
+    .data-item:hover {
+      background-color: #FBF0F2;
+    }
+
+    /* タイトルとURLの行 */
+    .item-header {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .item-title {
+      font-size: 14px;
+      font-weight: bold;
+      color: #333333;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex-shrink: 0;
+      max-width: 60%;
+    }
+
+    .item-url {
+      font-size: 11px;
+      color: #A09093;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+
+    /* タグやメタ情報などを表示するエリア */
+    .item-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .item-tags {
+      font-size: 11px;
+      color: #8A7E80;
+    }
+
+    .tag-pill {
+      display: inline-block;
+      background-color: #F5E6E9;
+      padding: 1px 6px;
+      border-radius: 10px;
+      margin-right: 4px;
+      margin-bottom: 2px;
+      color: #6A5A5D;
+      font-size: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="search-container">
+      <button type="button" class="search-button" id="searchBtn" title="検索">
+        <div class="search-icon-shape"></div>
+      </button>
+      <input type="text" class="search-input" placeholder="調べたい言葉をふわっと入力" autofocus>
+    </div>
+  </header>
+
+  <main>
+    <div class="results-board" id="dataBoard">
+      </div>
+  </main>
+
+  <script>
+    // 検索ボタンイベント
+    document.getElementById('searchBtn').addEventListener('click', () => {
+      console.log('検索ボタンがクリックされました');
+    });
+
+    /**
+     * データ（履歴・関連語）をボードに追加する関数
+     * @param {Array} dataList - 表示するデータの配列
+     */
+    function renderData(dataList) {
+      const board = document.getElementById('dataBoard');
+      board.innerHTML = ''; // 一度クリア
+
+      dataList.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'data-item';
+        div.innerHTML = `
+          <div class="item-header">
+            <div class="item-title">${item.title}</div>
+            <div class="item-url">${item.url}</div>
+          </div>
+          <div class="item-meta">
+            <div class="item-tags">${item.tags.map(t => `<span class="tag-pill">${t}</span>`).join('')}</div>
+          </div>
+        `;
+        board.appendChild(div);
+      });
+    }
+
+    // ここに将来的にデータを読み込むロジックを記述します
+  </script>
+
+</body>
+</html>
