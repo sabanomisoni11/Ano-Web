@@ -264,14 +264,13 @@ export default function App() {
                       onClick={() => toggleSelection(item.id)}
                     >
                       {/* チェックボックス */}
-                      <div className="w-12 flex justify-start shrink-0">
-                        <input 
-                          type="checkbox" 
-                          checked={isSelected}
-                          onChange={() => {}} 
-                          className="w-4 h-4 cursor-pointer accent-[#00FF41] bg-[#202124] border-[#9AA0A6] rounded"
-                          onClick={(e) => e.stopPropagation()} 
-                        />
+                     <div className="w-12 flex justify-start shrink-0" onClick={(e) => e.stopPropagation()}>
+                     <input 
+                       type="checkbox" 
+                       checked={isSelected}
+                        onChange={() => toggleSelection(item.id)} 
+                        className="w-4 h-4 cursor-pointer accent-[#00FF41] bg-[#202124] border-[#9AA0A6] rounded"
+                       />
                       </div>
 
                       {/* 時間 */}
