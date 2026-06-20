@@ -4,7 +4,7 @@
 
 let nowtime;
 let intime = new Date(); // ページが開かれた瞬間を最初の見はじめ時間にする;
-let Nminute = 3;//30秒以上タブをみていなかった場合にfunctionを実行する
+let Nminute = 3;//n秒以上タブをみていなかった場合にfunctionを実行する
 let checked = false;
 
 // 1. ページ読み込み時に即時送信
@@ -28,32 +28,33 @@ function getTime()//タブをみはじめたときとやめたときの時間を
     nowtime = new Date();
   }
 }
-function selectwords()//単語を抜き出す関数
-{
-  const selectors = ['h1', 'h2', 'h3', 'h4', 'strong', 'b', 'em'];
-  let words = new Set();
-  selectors.forEach(tag => {
-    document.querySelectorAll(tag).forEach(el => {
-      // テキストを取得して単語に分割
-      splitWords(el.innerText).forEach(w => words.add(w));
-    });
+
+// ここから下の抽出関数を3つ（selectwords, extractFrequentKeywords, triggerExtraction）書き換えた
+function extractCategorizedWords() {
+  // ① 見出し（h1〜h4）の抽出
+  const headings = new Set();
+  document.querySelectorAll('h1, h2, h3, h4').forEach(el => {
+    splitWords(el.innerText).forEach(w => headings.add(w));
   });
-  return words;
-}
-function extractFrequentKeywords(topN = 20) {
+
+  // ② 太字（strong, b, em）の抽出
+  const bolds = new Set();
+  document.querySelectorAll('strong, b, em').forEach(el => {
+    splitWords(el.innerText).forEach(w => bolds.add(w));
+  });
+
+  // ③ ページ全体の単語出現頻度（トップ50）
   const allText = document.body.innerText;
   const freq = {};
-
   splitWords(allText).forEach(word => {
     freq[word] = (freq[word] || 0) + 1;
   });
+  const sortedFreq = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 50);
+  const wordCounts = Object.fromEntries(sortedFreq);
 
-  // 出現回数の多い順に上位N件
-  return Object.entries(freq)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, topN)
-    .map(([word]) => word);
+  return { headings: [...headings], bolds: [...bolds], wordCounts };
 }
+
 const STOP_WORDS = new Set([
   // 助詞・助動詞
   'です', 'ます', 'ました', 'でした', 'ている', 'てい',
@@ -81,6 +82,7 @@ function splitWords(text) {
   }
   return words;
 }
+
 function getReferrer() {
   const metaDesc = document.querySelector('meta[name="description"]');
   return {
@@ -91,21 +93,22 @@ function getReferrer() {
     timestamp: new Date().toISOString(),
   };
 }
-function triggerExtraction() {
-  const structural = [...selectwords()];
-  const frequent = extractFrequentKeywords(20);
 
-  // 2つをマージして重複排除
-  const keywords = [...new Set([...structural, ...frequent])];
+// triggerExtraction を書き換え
+function triggerExtraction() {
+  const { headings, bolds, wordCounts } = extractCategorizedWords();
 
   chrome.runtime.sendMessage({
     type: 'KEYWORDS_EXTRACTED',
     data: {
       ...getReferrer(),
-      keywords,
+      headings,
+      bolds,
+      wordCounts
     }
   });
 }
+
 setInterval(() => {
   if (document.hidden === false && checked === false) {//タブをみているときに30秒以上経過していた場合
     const elapsed = (new Date() - intime) / 1000;
@@ -115,6 +118,7 @@ setInterval(() => {
     }
   }
 }, 1000);
+
 document.addEventListener("visibilitychange", () => //タブ閉じたとき条件が満たされていればfunctionを実行する
 {
   getTime();
