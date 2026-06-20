@@ -67,6 +67,10 @@ function isValidWord(word) {
   if (word.length <= 1) return false;         // 1文字除外
   if (STOP_WORDS.has(word)) return false;     // NGワード除外
   if (/^\d+$/.test(word)) return false;       // 数字のみ除外
+  if (/\d+\/\d+[（(].+[)）]/.test(word)) return false;   // 日付形式の除外（例: 12/31（木）） 
+  if (/\d+\/\d+/.test(word)) return false;                
+  if (/^\d+年\d+月\d+日$/.test(word)) return false;      
+  if (/^\d+月\d+日$/.test(word)) return false;  
   return true;
 }
 
