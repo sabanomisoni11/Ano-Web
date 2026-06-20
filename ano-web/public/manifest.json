@@ -36,5 +36,8 @@
       },
       "description": "Ano-Web 検索画面を開く"
     }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   }
 }

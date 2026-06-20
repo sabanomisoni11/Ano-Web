@@ -1,7 +1,22 @@
+// build前エラー回避用コメント
+/* global chrome */
+/* eslint-disable no-unused-vars */
+
 let nowtime;
 let intime = new Date(); // ページが開かれた瞬間を最初の見はじめ時間にする;
-let Nminute = 30;//30秒以上タブをみていなかった場合にfunctionを実行する
+let Nminute = 3;//30秒以上タブをみていなかった場合にfunctionを実行する
 let checked = false;
+
+// 1. ページ読み込み時に即時送信
+chrome.runtime.sendMessage({
+  type: 'PAGE_VISITED',
+  data: {
+    currentUrl: window.location.href,
+    title: document.title,
+    timestamp: new Date().toISOString()
+  }
+});
+
 function getTime()//タブをみはじめたときとやめたときの時間を取得する関数
 {
   if (document.hidden == false)//タブをみはじめた時の時間を取得
@@ -57,7 +72,6 @@ function isValidWord(word) {
 function splitWords(text) {
   // 日本語は形態素解析が本来必要だが、
   // 簡易版：句読点・記号で区切る
-  // (リーダー追記: Chrome標準の日本語分割機能を使ってさらに精度を上げました！)
   const segmenter = new Intl.Segmenter('ja', { granularity: 'word' });
   const words = [];
   for (const segment of segmenter.segment(text)) {
@@ -68,9 +82,7 @@ function splitWords(text) {
   return words;
 }
 function getReferrer() {
-  // (リーダー追記: AIに文脈を理解させるため、メタ説明文の取得処理を追加しました)
   const metaDesc = document.querySelector('meta[name="description"]');
-
   return {
     referrer: document.referrer || null,   // 1つ前のページURL
     currentUrl: location.href,
@@ -112,3 +124,22 @@ document.addEventListener("visibilitychange", () => //タブ閉じたとき条�
     triggerExtraction();
   }
 });
+
+// URLが変わるたびに「新しいページ訪問」として再カウントを開始する
+let lastUrl = location.href;
+new MutationObserver(() => {
+  if (location.href !== lastUrl) {
+    lastUrl = location.href;
+    checked = false; // 再度解析できるようにリセット
+    intime = new Date(); // タイマーリセット
+    // 新しいURLを送信
+    chrome.runtime.sendMessage({
+      type: 'PAGE_VISITED',
+      data: {
+        currentUrl: location.href,
+        title: document.title,
+        timestamp: new Date().toISOString()
+      }
+    });
+  }
+}).observe(document.querySelector("title"), { subtree: true, characterData: true, childList: true });

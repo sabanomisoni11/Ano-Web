@@ -33,38 +33,115 @@ async function textToVector(text) {
   return Array.from(output.data);
 }
 
+// ==========================================
+// IndexedDBの構築（AIの記憶の保存場所）
+// ==========================================
+const DB_NAME = "AnoWebDB";
+const STORE_NAME = "history_vectors";
+const DB_VERSION = 2; // エラー回避のためバージョン2に設定
+
+// DBを開く（なければ作る）関数
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      // 'currentUrl' (URL) をキーにしてデータを保存する箱を作成
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: "currentUrl" });
+        console.log("🗄️ IndexedDBの箱（ストア）を新規作成しました！");
+      }
+    };
+
+    request.onsuccess = (event) => resolve(event.target.result);
+    request.onerror = (event) => reject(event.target.error);
+  });
+}
+
+// データを保存する関数
+async function saveToDB(data) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    // 読み書き可能なトランザクションを開始
+    const transaction = db.transaction([STORE_NAME], "readwrite");
+    const store = transaction.objectStore(STORE_NAME);
+
+    // データを保存（すでに同じURLの履歴があれば上書きで最新化）
+    const request = store.put(data);
+
+    request.onsuccess = () => {
+      console.log("IndexedDBにAIの記憶（ベクトルデータ）を保存しました！", data.title);
+      resolve();
+    };
+    request.onerror = (event) => {
+      console.error("❌ 保存エラー:", event.target.error);
+      reject(event.target.error);
+    };
+  });
+}
+
+// ===============================================
 // memory.js から送られてきたデータを受け取るリスナー
+// ===============================================
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+
+  // ① ページ読み込み時に即時保存する処理
+  if (message.type === 'PAGE_VISITED') {
+    const { currentUrl, title, timestamp } = message.data;
+    saveToDB({
+      currentUrl,
+      title,
+      timestamp,
+      description: "", // 解析前は空
+      keywords: [],    // 解析前は空
+      vector: null     // 解析前はなし
+    });
+    return;
+  }
+
+  // ② 30秒後にキーワード抽出データを受け取って更新する処理
   if (message.type === 'KEYWORDS_EXTRACTED') {
     const pageData = message.data;
 
-    // ローカル保存処理
-    chrome.storage.local.set({ extractedData: pageData });
-
-    console.log("📩 memory.js からデータを受信しました！", pageData.title);
-
-    // タイトル、説明文、キーワードを結合し、「1つの意味を持つ文章」にする
     const combinedText = `
-            タイトル: ${pageData.title}
-            概要: ${pageData.description}
-            重要キーワード: ${pageData.keywords.join(', ')}
-        `.trim();
+        タイトル: ${pageData.title}
+        概要: ${pageData.description}
+        重要キーワード: ${pageData.keywords.join(', ')}
+    `.trim();
 
-    console.log("これからAIに食わせる文章:\n", combinedText);
-
-    // AIでベクトル化を実行
-    textToVector(combinedText).then((vector) => {
-      console.log("ベクトル化成功！(長さ):", vector.length);
-
-      // TODO: IndexedDBの本格的な構築までは、一旦 storage に保存したデータを使います
+    // ★修正：保存する文章の先頭に「passage: 」をつける
+    textToVector(`passage: ${combinedText}`).then(async (vector) => {
+      const updateData = {
+        currentUrl: pageData.currentUrl,
+        title: pageData.title,
+        description: pageData.description,
+        keywords: pageData.keywords,
+        timestamp: pageData.timestamp,
+        vector: vector
+      };
+      await saveToDB(updateData);
     });
-
     return true;
+  }
+
+  // ③ 検索クエリをベクトル化して返す処理
+  if (message.type === 'VECTORIZE_QUERY') {
+    // ★修正：検索ワードの先頭に「query: 」をつける
+    textToVector(`query: ${message.text}`)
+      .then(vector => {
+        sendResponse({ vector: vector });
+      })
+      .catch(err => {
+        console.error("ベクトル化エラー:", err);
+        sendResponse({ vector: null });
+      });
+    return true; // 非同期でsendResponseを呼ぶために必須
   }
 });
 
 // ==========================================
-// UIを開くためのショートカット＆アイコンクリック処理
+// UIを開くためのショートカット＆アイコンクリック処理（トップレベルに配置！）
 // ==========================================
 
 // 共通の「検索ページを開く」関数
