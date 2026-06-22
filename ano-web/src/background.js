@@ -25,11 +25,11 @@ async function textToVector(text) {
 }
 
 // ==========================================
-// IndexedDBの構築（バージョン4）
+// IndexedDBの構築（バージョン5）
 // ==========================================
 const DB_NAME = "AnoWebDB";
 const STORE_NAME = "history_vectors";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 function openDB() {
   return new Promise((resolve, reject) => {

@@ -6,7 +6,7 @@ import { Search, Clock, MonitorSmartphone, Trash2, MoreVertical, Menu } from 'lu
 // ==========================================
 function getAllHistoryFromDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open("AnoWebDB", 1);
+    const request = indexedDB.open("AnoWebDB", 5);
     request.onsuccess = (event) => {
       const db = event.target.result;
       if (!db.objectStoreNames.contains("history_vectors")) {
@@ -25,7 +25,7 @@ function getAllHistoryFromDB() {
 
 function deleteHistoryFromDB(id) {
   return new Promise((resolve) => {
-    const request = indexedDB.open("AnoWebDB", 1);
+    const request = indexedDB.open("AnoWebDB", 5);
     request.onsuccess = (event) => {
       const db = event.target.result;
       const transaction = db.transaction(["history_vectors"], "readwrite");

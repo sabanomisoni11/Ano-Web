@@ -3,9 +3,19 @@
   "name": "Ano-Web",
   "version": "1.0",
   "description": "AIを活用した「ふわっと検索」履歴アプリ",
+  "icons": {
+    "16": "web_logo.png",
+    "48": "web_logo.png",
+    "128": "web_logo.png"
+  },
   "permissions": [
     "storage",
     "tabs"
+  ],
+  "host_permissions": [
+    "https://huggingface.co/*",
+    "https://*.huggingface.co/*",
+    "https://cdn.jsdelivr.net/*"
   ],
   "content_scripts": [
     {
@@ -26,7 +36,8 @@
     "history": "index.html"
   },
   "action": {
-    "default_title": "Ano-Webを開く"
+    "default_title": "Ano-Webを開く",
+    "default_icon": "web_logo.png"
   },
   "commands": {
     "open-search-page": {
