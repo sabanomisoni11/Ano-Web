@@ -67,8 +67,28 @@ export default function App() {
       
       const sorted = [...data].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       
+      // 今日の日付と昨日の日付を取得しておく
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+
       const formatted = sorted.map(item => {
         const date = new Date(item.timestamp);
+        
+        // 日付が今日・昨日と一致するか判定
+        const isToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
+        const isYesterday = date.getDate() === yesterday.getDate() && date.getMonth() === yesterday.getMonth() && date.getFullYear() === yesterday.getFullYear();
+
+        const baseDateStr = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+        
+        // 「今日」「昨日」をつける（検索にもヒットするように元の年月日も残す）
+        let dateStr = baseDateStr;
+        if (isToday) {
+          dateStr = `今日 - ${baseDateStr}`;
+        } else if (isYesterday) {
+          dateStr = `昨日 - ${baseDateStr}`;
+        }
+
         let domain = item.currentUrl;
         try { 
           domain = new URL(item.currentUrl).hostname; 
@@ -77,11 +97,12 @@ export default function App() {
         return {
           id: item.currentUrl, 
           time: `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`,
+          dateStr: dateStr,
           title: item.title || "No Title",
           url: domain,
           icon: item.title ? item.title.charAt(0).toUpperCase() : 'W',
           originalUrl: item.currentUrl,
-          vector: item.vector // ★ AIの記憶データも保持しておく
+          vector: item.vector 
         };
       });
       
@@ -131,12 +152,13 @@ export default function App() {
       }
     };
 
-    // 普通の文字一致検索（保険）
+    // 普通の文字一致検索（保険 兼 日付検索）
     const fallbackSearch = (query) => {
       const lowerQuery = query.toLowerCase();
       const filtered = allHistory.filter(item => 
         item.title.toLowerCase().includes(lowerQuery) ||
-        item.url.toLowerCase().includes(lowerQuery)
+        item.url.toLowerCase().includes(lowerQuery) ||
+        item.dateStr.includes(lowerQuery) // 日付文字列も検索対象に追加
       );
       setHistoryItems(filtered);
     };
@@ -176,7 +198,6 @@ export default function App() {
       <aside className={`flex flex-col bg-[#1E1E20] transition-all duration-300 border-r border-[#2C2C2E] ${isSidebarOpen ? 'w-64' : 'w-0 overflow-hidden border-none'}`}>
         <div className="h-16 flex items-center px-6 shrink-0">
           <div className="flex items-center gap-4 cursor-pointer" onClick={() => setIsSidebarOpen(false)}>
-            {/* ★ 作成したロゴ画像を読み込む設定 */}
             <img src="/web_logo.png" alt="Ano-Web" className="w-14 h-14" />
             <span className="text-xl font-medium tracking-wide text-[#00FF41]">Ano-Web</span>
           </div>
@@ -223,7 +244,7 @@ export default function App() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="調べたい言葉をふわっと入力 （AI検索対応）"
+              placeholder="調べたい言葉をふわっと入力 （AI検索対応 / 日付検索対応）"
               className="w-full h-12 pl-14 pr-4 bg-[#202022] border border-[#3C3C3E] rounded-full text-[#E8EAED] placeholder-[#71717A] focus:outline-none focus:border-[#00FF41] focus:bg-[#202022] transition-colors"
             />
           </div>
@@ -255,59 +276,83 @@ export default function App() {
               </div>
             ) : (
               <div className="flex flex-col">
-                {historyItems.map((item) => {
-                  const isSelected = selectedIds.has(item.id);
-                  return (
-                    <div 
-                      key={item.id} 
-                      className={`flex items-center group px-6 py-3 hover:bg-[#2C2C2E] transition-colors cursor-pointer border-b border-[#333336]/50 last:border-none ${isSelected ? 'bg-[#2C2C2E]' : ''}`}
-                      onClick={() => toggleSelection(item.id)}
-                    >
-                      {/* チェックボックス */}
-                      <div className="w-12 flex justify-start shrink-0">
-                        <input 
-                          type="checkbox" 
-                          checked={isSelected}
-                          onChange={() => {}} 
-                          className="w-4 h-4 cursor-pointer accent-[#00FF41] bg-[#202124] border-[#9AA0A6] rounded"
-                          onClick={(e) => e.stopPropagation()} 
-                        />
-                      </div>
-
-                      {/* 時間 */}
-                      <div className="w-20 text-[#9AA0A6] text-[15px] shrink-0 font-medium">
-                        {item.time}
-                      </div>
-
-                      {/* アイコン */}
-                      <div className="w-8 h-8 rounded bg-[#3A3A3C] flex items-center justify-center text-xs font-bold text-[#D4D4D8] shrink-0 mr-4">
-                        {item.icon}
-                      </div>
-
-                      {/* タイトルとURL */}
-                      <div className="flex flex-1 items-baseline gap-4 min-w-0 pr-4">
-                        <span className="text-[15px] text-[#F4F4F5] truncate font-medium">
-                          {item.title}
-                        </span>
-                        <span className="text-[13px] text-[#71717A] truncate">
-                          {item.url}
-                        </span>
-                      </div>
-
-                      {/* ★AI類似度スコア（検索時のみ表示） */}
-                      {item.score !== undefined && item.score > 0 && searchQuery.trim() !== '' && (
-                        <div className="mr-4 px-3 py-1 bg-[#00FF41]/10 text-[#00FF41] text-xs font-bold rounded-full whitespace-nowrap">
-                          {Math.round(item.score * 100)}% Match
-                        </div>
-                      )}
-
-                      {/* オプションボタン */}
-                      <button className="w-8 h-8 rounded-full flex items-center justify-center text-[#71717A] opacity-0 group-hover:opacity-100 hover:bg-[#3C3C3E] transition-all">
-                        <MoreVertical size={18} />
-                      </button>
+                {Object.entries(
+                  // historyItemsを日付（dateStr）ごとにグループ分けする
+                  historyItems.reduce((acc, item) => {
+                    if (!acc[item.dateStr]) acc[item.dateStr] = [];
+                    acc[item.dateStr].push(item);
+                    return acc;
+                  }, {})
+                ).map(([dateStr, items]) => (
+                  <div key={dateStr}>
+                    {/* 日付のヘッダー区切り */}
+                    <div className="px-6 py-2 bg-[#1E1E20] border-y border-[#333336] text-[#00FF41] text-sm font-bold tracking-wider sticky top-0 z-0">
+                      {dateStr}
                     </div>
-                  );
-                })}
+                    
+                    {/* その日の履歴リスト */}
+                    {items.map((item) => {
+                      const isSelected = selectedIds.has(item.id);
+                      return (
+                        <div 
+                          key={item.id} 
+                          className={`flex items-center group px-6 py-3 hover:bg-[#2C2C2E] transition-colors border-b border-[#333336]/50 last:border-none ${isSelected ? 'bg-[#2C2C2E]' : ''}`}
+                          onClick={() => toggleSelection(item.id)}
+                        >
+                          {/* チェックボックス */}
+                          <div className="w-12 flex justify-start shrink-0">
+                            <input 
+                              type="checkbox" 
+                              checked={isSelected}
+                              onChange={() => toggleSelection(item.id)}
+                              className="w-4 h-4 cursor-pointer accent-[#00FF41] bg-[#202124] border-[#9AA0A6] rounded"
+                              onClick={(e) => e.stopPropagation()} 
+                            />
+                          </div>
+
+                          {/* 時間 */}
+                          <div className="w-20 text-[#9AA0A6] text-[15px] shrink-0 font-medium">
+                            {item.time}
+                          </div>
+
+                          {/* アイコン */}
+                          <div className="w-8 h-8 rounded bg-[#3A3A3C] flex items-center justify-center text-xs font-bold text-[#D4D4D8] shrink-0 mr-4">
+                            {item.icon}
+                          </div>
+
+                          {/* タイトルとURL */}
+                          <div 
+                            className="flex flex-1 items-baseline gap-4 min-w-0 pr-4 cursor-pointer"
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              window.open(item.originalUrl, '_blank', 'noopener,noreferrer');
+                            }}
+                            title="ダブルクリックでページを開く"
+                          >
+                            <span className="text-[15px] text-[#F4F4F5] truncate font-medium hover:text-[#00FF41] hover:underline transition-colors">
+                              {item.title}
+                            </span>
+                            <span className="text-[13px] text-[#71717A] truncate">
+                              {item.url}
+                            </span>
+                          </div>
+
+                          {/* AI類似度スコア */}
+                          {item.score !== undefined && item.score > 0 && searchQuery.trim() !== '' && (
+                            <div className="mr-4 px-3 py-1 bg-[#00FF41]/10 text-[#00FF41] text-xs font-bold rounded-full whitespace-nowrap">
+                              {Math.round(item.score * 100)}% Match
+                            </div>
+                          )}
+
+                          {/* オプションボタン */}
+                          <button className="w-8 h-8 rounded-full flex items-center justify-center text-[#71717A] opacity-0 group-hover:opacity-100 hover:bg-[#3C3C3E] transition-all">
+                            <MoreVertical size={18} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
             )}
           </div>
