@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Search, Clock, MonitorSmartphone, Trash2, MoreVertical, Menu } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Search, Clock, MonitorSmartphone, Trash2, MoreVertical, Menu, Minus, Plus, Settings, X } from 'lucide-react';
 
 // ==========================================
 // 🗄️ IndexedDB関連の関数
@@ -55,115 +55,123 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  
+  // ★ UI・設定用のState
+  const [zoomLevel, setZoomLevel] = useState(100);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [userSettings, setUserSettings] = useState({
+    filterGoogle: true,  // Google検索を除外するか
+    maxItems: 100,       // 履歴の最大表示数
+  });
 
-  // 表示用のリストと、全データを保持するリストの2つを用意する
+  // データ保持用のState
+  const [rawDbData, setRawDbData] = useState([]); // DBから取得した生データ
   const [historyItems, setHistoryItems] = useState([]);
   const [allHistory, setAllHistory] = useState([]);
 
   // 1. 初回起動時にIndexedDBから本物のデータを読み込む
   useEffect(() => {
     getAllHistoryFromDB().then(data => {
-      console.log("📚 DBから本物の履歴を読み込みました:", data.length, "件");
-      
-      const sorted = [...data].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-      
-      // 今日の日付と昨日の日付を取得しておく
-      const today = new Date();
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-
-      const formatted = sorted.map(item => {
-        const date = new Date(item.timestamp);
-        
-        // 日付が今日・昨日と一致するか判定
-        const isToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
-        const isYesterday = date.getDate() === yesterday.getDate() && date.getMonth() === yesterday.getMonth() && date.getFullYear() === yesterday.getFullYear();
-
-        const baseDateStr = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
-        
-        // 「今日」「昨日」をつける（検索にもヒットするように元の年月日も残す）
-        let dateStr = baseDateStr;
-        if (isToday) {
-          dateStr = `今日 - ${baseDateStr}`;
-        } else if (isYesterday) {
-          dateStr = `昨日 - ${baseDateStr}`;
-        }
-
-        let domain = item.currentUrl;
-        try { 
-          domain = new URL(item.currentUrl).hostname; 
-        } catch (err) {}
-
-        return {
-          id: item.currentUrl, 
-          time: `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`,
-          dateStr: dateStr,
-          title: item.title || "No Title",
-          url: domain,
-          icon: item.title ? item.title.charAt(0).toUpperCase() : 'W',
-          originalUrl: item.currentUrl,
-          vector: item.vector 
-        };
-      });
-      
-      setHistoryItems(formatted);
-      setAllHistory(formatted); // 全件データとしてバックアップ
+      console.log("📚 DBから生データを読み込みました:", data.length, "件");
+      setRawDbData(data);
     });
   }, []);
 
-  // 2. ★ AI検索処理（検索ワードが変わるたびに自動で実行）
+  // 2. ★ 設定が変わるたびに、リストをフィルタリング＆整形し直す
+  useEffect(() => {
+    if (rawDbData.length === 0) return;
+
+    // 最新順にソート
+    let sorted = [...rawDbData].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    // ★ 設定1: Google検索フィルタ
+    if (userSettings.filterGoogle) {
+      sorted = sorted.filter(item => !(item.title && item.title.includes('- Google 検索')));
+    }
+
+    // ★ 設定2: 最大表示件数でカット
+    sorted = sorted.slice(0, userSettings.maxItems);
+
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const formatted = sorted.map(item => {
+      const date = new Date(item.timestamp);
+      const isToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
+      const isYesterday = date.getDate() === yesterday.getDate() && date.getMonth() === yesterday.getMonth() && date.getFullYear() === yesterday.getFullYear();
+
+      const baseDateStr = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+      
+      let dateStr = baseDateStr;
+      if (isToday) dateStr = `今日 - ${baseDateStr}`;
+      else if (isYesterday) dateStr = `昨日 - ${baseDateStr}`;
+
+      const searchDateKey = `${baseDateStr} ${date.getMonth() + 1}/${date.getDate()} ${date.getMonth() + 1}-${date.getDate()}`;
+
+      let domain = item.currentUrl;
+      try { domain = new URL(item.currentUrl).hostname; } catch (err) {}
+
+      return {
+        id: item.currentUrl, 
+        time: `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`,
+        dateStr: dateStr,
+        searchDateKey: searchDateKey,
+        title: item.title || "No Title",
+        url: domain,
+        icon: item.title ? item.title.charAt(0).toUpperCase() : 'W',
+        originalUrl: item.currentUrl,
+        vector: item.vector 
+      };
+    });
+    
+    setAllHistory(formatted);
+    // 検索窓が空なら、すぐに表示リストにも反映
+    if (!searchQuery.trim()) setHistoryItems(formatted);
+  }, [rawDbData, userSettings]);
+
+  // 3. AI検索処理（文字入力時）
   useEffect(() => {
     const performSearch = async () => {
       const query = searchQuery.trim();
       if (!query) {
-        // 検索枠が空なら元のリストに戻す
         setHistoryItems(allHistory);
         return;
       }
 
-      // Chromeの通信機能が使える環境かチェック
       if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-        // background.js に「この言葉をベクトル化して！」とお願いする
         chrome.runtime.sendMessage(
           { type: 'VECTORIZE_QUERY', text: query },
           (response) => {
             if (response && response.vector) {
               const queryVector = response.vector;
-              
-              // 全ての履歴と「意味の近さ」を計算する
               const scoredItems = allHistory.map(item => {
-                // まだ解析されていない（ベクトルがない）場合はスコア0
                 if (!item.vector) return { ...item, score: 0 };
-                
                 const score = cosineSimilarity(queryVector, item.vector);
                 return { ...item, score };
               });
-
-              // スコアが高い順（意味が近い順）に並び替え
               scoredItems.sort((a, b) => b.score - a.score);
               setHistoryItems(scoredItems);
             } else {
-              fallbackSearch(query); // ベクトル化失敗時は普通のキーワード検索
+              fallbackSearch(query);
             }
           }
         );
       } else {
-        fallbackSearch(query); // Chrome環境外のテスト用
+        fallbackSearch(query);
       }
     };
 
-    // 普通の文字一致検索（保険 兼 日付検索）
     const fallbackSearch = (query) => {
       const lowerQuery = query.toLowerCase();
       const filtered = allHistory.filter(item => 
         item.title.toLowerCase().includes(lowerQuery) ||
         item.url.toLowerCase().includes(lowerQuery) ||
-        item.dateStr.includes(lowerQuery) // 日付文字列も検索対象に追加
+        item.searchDateKey.includes(lowerQuery)
       );
       setHistoryItems(filtered);
     };
 
-    // 入力して0.5秒手が止まったら検索を実行（重い計算を防ぐデバウンス処理）
     const timeoutId = setTimeout(() => {
       performSearch();
     }, 500);
@@ -174,11 +182,8 @@ export default function App() {
 
   const toggleSelection = (id) => {
     const newSelection = new Set(selectedIds);
-    if (newSelection.has(id)) {
-      newSelection.delete(id);
-    } else {
-      newSelection.add(id);
-    }
+    if (newSelection.has(id)) newSelection.delete(id);
+    else newSelection.add(id);
     setSelectedIds(newSelection);
   };
 
@@ -186,14 +191,65 @@ export default function App() {
     for (const id of selectedIds) {
       await deleteHistoryFromDB(id);
     }
-    setHistoryItems(historyItems.filter(item => !selectedIds.has(item.id)));
-    setAllHistory(allHistory.filter(item => !selectedIds.has(item.id))); // バックアップからも消す
+    // 生データからも削除して再レンダリングをトリガー
+    setRawDbData(prev => prev.filter(item => !selectedIds.has(item.currentUrl)));
     setSelectedIds(new Set());
   };
 
   return (
     <div className="flex h-screen w-full bg-[#18181A] text-[#E8EAED] font-sans overflow-hidden">
       
+      {/* ⚙️ 設定モーダル */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-[#1E1E20] border border-[#3C3C3E] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#3C3C3E]">
+              <h2 className="text-lg font-bold text-[#E8EAED] flex items-center gap-2">
+                <Settings size={20} className="text-[#00FF41]" />
+                システム設定
+              </h2>
+              <button onClick={() => setIsSettingsOpen(false)} className="text-[#9AA0A6] hover:text-white transition-colors p-1">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* 設定項目: Google検索除外 */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-medium text-[#F4F4F5]">Google検索結果の除外</div>
+                  <div className="text-xs text-[#71717A] mt-1">「- Google 検索」を含む履歴を非表示にします</div>
+                </div>
+                <button 
+                  onClick={() => setUserSettings(prev => ({ ...prev, filterGoogle: !prev.filterGoogle }))}
+                  className={`w-11 h-6 rounded-full transition-colors relative ${userSettings.filterGoogle ? 'bg-[#00FF41]' : 'bg-[#3C3C3E]'}`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${userSettings.filterGoogle ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+
+              {/* 設定項目: 最大表示件数 */}
+              <div className="space-y-3">
+                <div>
+                  <div className="font-medium text-[#F4F4F5]">最大表示件数</div>
+                  <div className="text-xs text-[#71717A] mt-1">画面に読み込む履歴の上限（軽くしたい場合は減らしてください）</div>
+                </div>
+                <input 
+                  type="range" 
+                  min="50" 
+                  max="1000" 
+                  step="50"
+                  value={userSettings.maxItems}
+                  onChange={(e) => setUserSettings(prev => ({ ...prev, maxItems: Number(e.target.value) }))}
+                  className="w-full accent-[#00FF41] cursor-pointer"
+                />
+                <div className="text-right text-sm text-[#00FF41] font-bold">{userSettings.maxItems} 件</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* サイドバー */}
       <aside className={`flex flex-col bg-[#1E1E20] transition-all duration-300 border-r border-[#2C2C2E] ${isSidebarOpen ? 'w-64' : 'w-0 overflow-hidden border-none'}`}>
         <div className="h-16 flex items-center px-6 shrink-0">
@@ -236,7 +292,7 @@ export default function App() {
           )}
 
           {/* 検索コンテナ */}
-          <div className="flex-1 max-w-[800px] relative">
+          <div className="flex-1 max-w-[600px] relative">
             <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none text-[#9AA0A6]">
               <Search size={20} />
             </div>
@@ -249,7 +305,7 @@ export default function App() {
             />
           </div>
 
-          {selectedIds.size > 0 && (
+          {selectedIds.size > 0 ? (
             <div className="flex items-center gap-4 ml-auto animate-in fade-in duration-200">
               <span className="text-[#00FF41] text-sm font-medium">
                 {selectedIds.size} 件を選択中
@@ -262,13 +318,47 @@ export default function App() {
                 削除
               </button>
             </div>
+          ) : (
+            <div className="flex items-center gap-4 ml-auto">
+              {/* 🔍 ズームコントローラー */}
+              <div className="flex items-center gap-2 bg-[#202022] border border-[#3C3C3E] rounded-full px-4 py-1.5 hidden md:flex">
+                <button 
+                  onClick={() => setZoomLevel(prev => Math.max(50, prev - 10))} 
+                  className="p-1 text-[#9AA0A6] hover:text-[#00FF41] hover:bg-[#2C2C2E] rounded transition-colors"
+                  title="縮小"
+                >
+                  <Minus size={16} />
+                </button>
+                <span className="text-[#E8EAED] text-sm w-12 text-center font-medium select-none">
+                  {zoomLevel}%
+                </span>
+                <button 
+                  onClick={() => setZoomLevel(prev => Math.min(150, prev + 10))} 
+                  className="p-1 text-[#9AA0A6] hover:text-[#00FF41] hover:bg-[#2C2C2E] rounded transition-colors"
+                  title="拡大"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+
+              {/* ⚙️ 設定ボタン */}
+              <button 
+                onClick={() => setIsSettingsOpen(true)}
+                className="w-10 h-10 flex items-center justify-center rounded-full text-[#9AA0A6] hover:bg-[#2C2C2E] hover:text-[#00FF41] transition-colors"
+                title="システム設定"
+              >
+                <Settings size={20} />
+              </button>
+            </div>
           )}
         </header>
 
         {/* 履歴リストエリア */}
         <div className="flex-1 overflow-y-auto p-6 md:p-8">
-          <div className="max-w-[1000px] mx-auto bg-[#242426] border border-[#333336] rounded-2xl shadow-xl overflow-hidden py-2">
-            
+          <div 
+            className="max-w-[1000px] mx-auto bg-[#242426] border border-[#333336] rounded-2xl shadow-xl overflow-hidden py-2 transition-transform origin-top"
+            style={{ zoom: zoomLevel / 100 }}
+          >
             {historyItems.length === 0 ? (
               <div className="text-center text-[#71717A] py-20">
                 <p>保存された履歴がまだありません。</p>
@@ -277,7 +367,6 @@ export default function App() {
             ) : (
               <div className="flex flex-col">
                 {Object.entries(
-                  // historyItemsを日付（dateStr）ごとにグループ分けする
                   historyItems.reduce((acc, item) => {
                     if (!acc[item.dateStr]) acc[item.dateStr] = [];
                     acc[item.dateStr].push(item);
@@ -285,12 +374,10 @@ export default function App() {
                   }, {})
                 ).map(([dateStr, items]) => (
                   <div key={dateStr}>
-                    {/* 日付のヘッダー区切り */}
                     <div className="px-6 py-2 bg-[#1E1E20] border-y border-[#333336] text-[#00FF41] text-sm font-bold tracking-wider sticky top-0 z-0">
                       {dateStr}
                     </div>
                     
-                    {/* その日の履歴リスト */}
                     {items.map((item) => {
                       const isSelected = selectedIds.has(item.id);
                       return (
@@ -299,28 +386,21 @@ export default function App() {
                           className={`flex items-center group px-6 py-3 hover:bg-[#2C2C2E] transition-colors border-b border-[#333336]/50 last:border-none ${isSelected ? 'bg-[#2C2C2E]' : ''}`}
                           onClick={() => toggleSelection(item.id)}
                         >
-                          {/* チェックボックス */}
                           <div className="w-12 flex justify-start shrink-0">
                             <input 
                               type="checkbox" 
                               checked={isSelected}
-                              onChange={() => toggleSelection(item.id)}
+                              onChange={() => toggleSelection(item.id)} 
                               className="w-4 h-4 cursor-pointer accent-[#00FF41] bg-[#202124] border-[#9AA0A6] rounded"
                               onClick={(e) => e.stopPropagation()} 
                             />
                           </div>
-
-                          {/* 時間 */}
                           <div className="w-20 text-[#9AA0A6] text-[15px] shrink-0 font-medium">
                             {item.time}
                           </div>
-
-                          {/* アイコン */}
                           <div className="w-8 h-8 rounded bg-[#3A3A3C] flex items-center justify-center text-xs font-bold text-[#D4D4D8] shrink-0 mr-4">
                             {item.icon}
                           </div>
-
-                          {/* タイトルとURL */}
                           <div 
                             className="flex flex-1 items-baseline gap-4 min-w-0 pr-4 cursor-pointer"
                             onDoubleClick={(e) => {
@@ -336,15 +416,11 @@ export default function App() {
                               {item.url}
                             </span>
                           </div>
-
-                          {/* AI類似度スコア */}
                           {item.score !== undefined && item.score > 0 && searchQuery.trim() !== '' && (
                             <div className="mr-4 px-3 py-1 bg-[#00FF41]/10 text-[#00FF41] text-xs font-bold rounded-full whitespace-nowrap">
                               {Math.round(item.score * 100)}% Match
                             </div>
                           )}
-
-                          {/* オプションボタン */}
                           <button className="w-8 h-8 rounded-full flex items-center justify-center text-[#71717A] opacity-0 group-hover:opacity-100 hover:bg-[#3C3C3E] transition-all">
                             <MoreVertical size={18} />
                           </button>
